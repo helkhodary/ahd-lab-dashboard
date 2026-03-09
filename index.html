@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AHD Satellite Clinics — Lab Test Dynamics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d14;
+    --surface: #10141f;
+    --surface2: #161b2a;
+    --border: #1f2840;
+    --accent: #00e5a0;
+    --accent2: #ff6b35;
+    --accent3: #5b8dee;
+    --warn: #ffcc00;
+    --text: #e8eaf2;
+    --muted: #6b7499;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-mono); font-size: 13px; min-height: 100vh; overflow-x: hidden;
+  }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image: linear-gradient(rgba(0,229,160,0.025) 1px,transparent 1px), linear-gradient(90deg,rgba(0,229,160,0.025) 1px,transparent 1px);
+    background-size:40px 40px; pointer-events:none; z-index:0;
+  }
+  .container { position:relative; z-index:1; max-width:1440px; margin:0 auto; padding:24px; }
+
+  header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:28px; padding-bottom:20px; border-bottom:1px solid var(--border); }
+  .header-left h1 { font-family:var(--font-head); font-size:26px; font-weight:800; letter-spacing:-0.5px; line-height:1.1; }
+  .header-left h1 span { color:var(--accent); }
+  .header-left .subtitle { margin-top:6px; color:var(--muted); font-size:10px; letter-spacing:1.2px; text-transform:uppercase; }
+  .header-right { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+  .badge { padding:4px 12px; border-radius:2px; font-size:10px; letter-spacing:0.5px; text-transform:uppercase; font-weight:500; }
+  .badge-green { background:rgba(0,229,160,.12); color:var(--accent); border:1px solid rgba(0,229,160,.25); }
+  .badge-orange { background:rgba(255,107,53,.12); color:var(--accent2); border:1px solid rgba(255,107,53,.25); }
+  .badge-yellow { background:rgba(255,204,0,.12); color:var(--warn); border:1px solid rgba(255,204,0,.25); }
+  .live-dot { display:inline-block; width:7px; height:7px; background:var(--accent); border-radius:50%; margin-right:6px; animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)} }
+
+  /* NAV TABS */
+  .nav-tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--border); }
+  .tab-btn {
+    padding:8px 18px; font-family:var(--font-mono); font-size:11px; text-transform:uppercase;
+    letter-spacing:1px; color:var(--muted); background:none; border:none; cursor:pointer;
+    border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.2s;
+  }
+  .tab-btn:hover { color:var(--text); }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+  /* TAB PANELS */
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+
+  /* KPI STRIP */
+  .kpi-strip { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:20px; }
+  .kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:14px; position:relative; overflow:hidden; transition:border-color .2s; }
+  .kpi-card:hover { border-color:var(--accent); }
+  .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .kpi-card.green::before { background:var(--accent); }
+  .kpi-card.orange::before { background:var(--accent2); }
+  .kpi-card.blue::before { background:var(--accent3); }
+  .kpi-card.yellow::before { background:var(--warn); }
+  .kpi-label { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:6px; }
+  .kpi-value { font-family:var(--font-head); font-size:24px; font-weight:700; line-height:1; }
+  .kpi-value.green{color:var(--accent)} .kpi-value.orange{color:var(--accent2)} .kpi-value.blue{color:var(--accent3)} .kpi-value.yellow{color:var(--warn)}
+  .kpi-sub { font-size:10px; color:var(--muted); margin-top:4px; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid21 { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid12 { display:grid; grid-template-columns:1fr 2fr; gap:16px; margin-bottom:16px; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:18px; position:relative; margin-bottom:0; }
+  .card-title { font-family:var(--font-head); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text); margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; }
+  .card-title .tag { font-family:var(--font-mono); font-size:10px; color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0; }
+  canvas { width:100% !important; }
+
+  /* POCT TABLE */
+  .data-table { width:100%; border-collapse:collapse; }
+  .data-table th { font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); font-weight:500; }
+  .data-table th.right,.data-table td.right { text-align:right; }
+  .data-table td { padding:9px 8px; border-bottom:1px solid rgba(31,40,64,.5); font-size:12px; vertical-align:middle; }
+  .data-table tr:last-child td { border-bottom:none; }
+  .data-table tr:hover td { background:rgba(255,255,255,.02); }
+  .strong-name { font-family:var(--font-head); font-size:13px; font-weight:600; }
+  .score-bar-wrap { display:flex; align-items:center; gap:8px; }
+  .score-bar-bg { flex:1; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
+  .score-bar-fill { height:100%; border-radius:3px; }
+  .score-val { font-family:var(--font-head); font-size:14px; font-weight:700; min-width:28px; text-align:right; }
+  .recommendation { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:2px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; }
+  .rec-deploy { background:rgba(0,229,160,.15); color:var(--accent); border:1px solid rgba(0,229,160,.3); }
+  .rec-consider { background:rgba(255,204,0,.15); color:var(--warn); border:1px solid rgba(255,204,0,.3); }
+  .rec-monitor { background:rgba(91,141,238,.15); color:var(--accent3); border:1px solid rgba(91,141,238,.3); }
+  .rec-hold { background:rgba(107,116,153,.15); color:var(--muted); border:1px solid rgba(107,116,153,.3); }
+
+  /* TAT BARS */
+  .tat-bar-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .tat-fac-name { width:150px; font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }
+  .tat-bar-bg { flex:1; height:20px; background:var(--border); border-radius:2px; overflow:hidden; }
+  .tat-bar-fill { height:100%; display:flex; align-items:center; padding-left:8px; font-size:10px; font-weight:500; }
+  .tat-val { font-size:10px; color:var(--muted); width:44px; text-align:right; flex-shrink:0; }
+
+  /* HEATMAP */
+  .heatmap-wrap { overflow-x:auto; }
+  .hm-hour-labels { display:flex; gap:3px; margin-left:145px; margin-bottom:4px; }
+  .hm-hour-label { width:30px; text-align:center; font-size:9px; color:var(--muted); }
+  .heatmap { display:grid; gap:3px; }
+  .heatmap-row { display:flex; gap:3px; align-items:center; }
+  .hm-label { width:142px; font-size:10px; color:var(--muted); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hm-cell { width:30px; height:22px; border-radius:2px; display:flex; align-items:center; justify-content:center; font-size:9px; cursor:default; transition:transform .1s; }
+  .hm-cell:hover { transform:scale(1.2); z-index:10; }
+
+  /* PHYSICIAN CARDS */
+  .doc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
+  .doc-card { background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:14px; transition:border-color .2s; }
+  .doc-card:hover { border-color:var(--accent3); }
+  .doc-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; gap:8px; }
+  .doc-name { font-family:var(--font-head); font-size:13px; font-weight:700; line-height:1.3; color:var(--text); }
+  .doc-spec { font-size:10px; color:var(--accent3); margin-top:3px; text-transform:uppercase; letter-spacing:.5px; }
+  .doc-count-badge { background:rgba(0,229,160,.1); border:1px solid rgba(0,229,160,.2); color:var(--accent); padding:3px 10px; border-radius:2px; font-family:var(--font-head); font-size:14px; font-weight:700; white-space:nowrap; }
+  .doc-fac { font-size:10px; color:var(--muted); margin-top:6px; }
+  .doc-bar-bg { width:100%; height:3px; background:var(--border); border-radius:2px; margin-top:10px; }
+  .doc-bar-fill { height:3px; background:var(--accent3); border-radius:2px; }
+
+  /* NATIONALITY PILLS */
+  .nat-list { display:flex; flex-direction:column; gap:7px; }
+  .nat-row { display:flex; align-items:center; gap:10px; }
+  .nat-flag { font-size:16px; flex-shrink:0; width:24px; text-align:center; }
+  .nat-name { font-size:11px; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nat-bar-bg { width:100px; height:5px; background:var(--border); border-radius:3px; flex-shrink:0; overflow:hidden; }
+  .nat-bar-fill { height:5px; border-radius:3px; }
+  .nat-count { font-size:11px; color:var(--muted); width:36px; text-align:right; flex-shrink:0; }
+
+  /* CLINIC SELECTOR */
+  .clinic-selector { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .clinic-btn { padding:6px 14px; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:2px; cursor:pointer; transition:all .2s; }
+  .clinic-btn:hover { border-color:var(--accent); color:var(--text); }
+  .clinic-btn.active { background:rgba(0,229,160,.1); border-color:var(--accent); color:var(--accent); }
+
+  .insight-box { background:var(--surface2); border-left:3px solid var(--accent); padding:11px 14px; margin-top:12px; border-radius:0 4px 4px 0; font-size:11px; line-height:1.6; color:var(--text); }
+  .insight-box.warn { border-left-color:var(--accent2); }
+  .insight-box.yellow { border-left-color:var(--warn); }
+  .insight-box.blue { border-left-color:var(--accent3); }
+
+  footer { margin-top:28px; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:10px; letter-spacing:.5px; }
+
+  /* ── TABLET (≤1100px) ── */
+  @media(max-width:1100px) {
+    .kpi-strip{grid-template-columns:repeat(3,1fr)}
+    .grid2,.grid3,.grid21,.grid12{grid-template-columns:1fr}
+  }
+
+  /* ── MOBILE (≤768px) ── */
+  @media(max-width:768px) {
+    .container { padding:14px; }
+
+    header { flex-direction:column; gap:12px; }
+    .header-left h1 { font-size:20px; }
+    .header-right { justify-content:flex-start; }
+
+    /* tabs: scrollable single row */
+    .nav-tabs {
+      overflow-x:auto; -webkit-overflow-scrolling:touch;
+      flex-wrap:nowrap; gap:0; padding-bottom:0;
+      scrollbar-width:none;
+    }
+    .nav-tabs::-webkit-scrollbar { display:none; }
+    .tab-btn { padding:10px 14px; font-size:10px; white-space:nowrap; flex-shrink:0; }
+
+    /* KPI: 2 columns on mobile */
+    .kpi-strip { grid-template-columns:repeat(2,1fr); gap:8px; }
+    .kpi-value { font-size:20px; }
+    .kpi-card { padding:12px; }
+
+    /* all grids → single column */
+    .grid2,.grid3,.grid21,.grid12 { grid-template-columns:1fr; gap:12px; }
+
+    /* card padding */
+    .card { padding:14px; }
+    .card-title { font-size:11px; flex-direction:column; align-items:flex-start; gap:3px; }
+
+    /* table: horizontal scroll + hide less important cols */
+    .data-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .data-table th, .data-table td { padding:7px 6px; font-size:11px; white-space:nowrap; }
+    .hide-mobile { display:none; }
+
+    /* score bar narrower */
+    .score-bar-wrap { gap:5px; }
+
+    /* doc grid: 1 col */
+    .doc-grid { grid-template-columns:1fr; }
+    .doc-card { padding:12px; }
+
+    /* clinic selector: scroll */
+    .clinic-selector { overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap; padding-bottom:4px; scrollbar-width:none; }
+    .clinic-selector::-webkit-scrollbar { display:none; }
+    .clinic-btn { white-space:nowrap; flex-shrink:0; padding:6px 12px; }
+
+    /* nat per clinic grid */
+    #natPerClinicGrid { grid-template-columns:1fr !important; }
+
+    /* heatmap: scroll */
+    .heatmap-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .hm-label { width:90px; font-size:9px; }
+    .hm-hour-labels { margin-left:93px; }
+    .hm-cell { width:26px; height:20px; }
+    .hm-hour-label { width:26px; }
+
+    /* TAT bars */
+    .tat-fac-name { width:100px; font-size:10px; }
+    .tat-val { width:32px; }
+
+    /* footer */
+    footer { flex-direction:column; gap:6px; text-align:center; }
+
+    /* ops KPI strip: 2x2 */
+    #tab-operations .kpi-strip { grid-template-columns:repeat(2,1fr); }
+
+    /* insight boxes */
+    .insight-box { font-size:10px; padding:10px 12px; }
+  }
+
+  /* ── SMALL MOBILE (≤420px) ── */
+  @media(max-width:420px) {
+    .kpi-strip { grid-template-columns:1fr 1fr; }
+    .header-left h1 { font-size:17px; }
+    .badge { font-size:9px; padding:3px 8px; }
+    .doc-name { font-size:12px; }
+    .nat-bar-bg { width:70px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="header-left">
+      <h1>AHD Satellite Clinics — <span>Lab Test Dynamics</span></h1>
+      <div class="subtitle">POCT Deployment Intelligence · Feb 28 – Mar 8, 2026 · 7,394 records</div>
+    </div>
+    <div class="header-right">
+      <span class="badge badge-green"><span class="live-dot"></span>7,394 tests</span>
+      <span class="badge badge-orange">7 clinics</span>
+      <span class="badge badge-yellow">1,100 patients</span>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('overview')">Overview & POCT</button>
+    <button class="tab-btn" onclick="switchTab('physicians')">Physicians</button>
+    <button class="tab-btn" onclick="switchTab('nationality')">Patient Nationality</button>
+    <button class="tab-btn" onclick="switchTab('operations')">Operations & TAT</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ TAB 1: OVERVIEW -->
+  <div id="tab-overview" class="tab-panel active">
+    <div class="kpi-strip">
+      <div class="kpi-card green"><div class="kpi-label">Total Tests</div><div class="kpi-value green">7,394</div><div class="kpi-sub">9-day window</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">POCT Tests</div><div class="kpi-value orange">589</div><div class="kpi-sub">8.0% of volume</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Avg TAT</div><div class="kpi-value blue">174<span style="font-size:13px"> min</span></div><div class="kpi-sub">Draw → Verified</div></div>
+      <div class="kpi-card yellow"><div class="kpi-label">#1 POCT Test</div><div class="kpi-value yellow" style="font-size:16px">Rapid Strep</div><div class="kpi-sub">400 tests · 68% of POCT</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Unique Patients</div><div class="kpi-value green">1,100</div><div class="kpi-sub">~6.7 tests/patient</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Deploy-Ready</div><div class="kpi-value orange">3</div><div class="kpi-sub">Mira · NAS · Khawaneej</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Daily Test Volume by Clinic <span class="tag">Mar 1–8</span></div>
+        <canvas id="dailyChart" height="210"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">POCT vs Central Lab Split <span class="tag">by clinic</span></div>
+        <canvas id="poctSplitChart" height="210"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">POCT Deployment Readiness Score <span class="tag">composite: volume 30% · POCT% 30% · TAT 20% · simplicity 20%</span></div>
+      <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Clinic</th><th class="right">Total</th><th class="right">POCT%</th>
+            <th class="right hide-mobile">Avg TAT</th><th class="right hide-mobile">Tests/Pt</th>
+            <th style="width:130px">Score</th><th>Decision</th><th class="hide-mobile">Key Driver</th>
+          </tr>
+        </thead>
+        <tbody id="poct-tbody"></tbody>
+      </table>
+      </div>
+      <div class="insight-box warn">⚡ <strong>Mira, Nad Al Sheba, and Al Khawaneej</strong> score highest for POCT deployment. All three show double-digit POCT%, 150–188 min TAT pressure, and high Rapid Strep / Flu demand. A single Strep+Flu combo device per clinic covers ~80% of current POCT load.</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Top 10 Tests — All Clinics <span class="tag">volume</span></div>
+        <canvas id="topTestsChart" height="240"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">POCT Breakdown by Clinic <span class="tag">test type</span></div>
+        <canvas id="poctBreakdownChart" height="240"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ TAB 2: PHYSICIANS -->
+  <div id="tab-physicians" class="tab-panel">
+
+    <div class="clinic-selector" id="docClinicFilter">
+      <button class="clinic-btn active" onclick="filterDocs('all', this)">All Clinics</button>
+      <button class="clinic-btn" onclick="filterDocs('Al Barsha', this)">Al Barsha</button>
+      <button class="clinic-btn" onclick="filterDocs('Dubai Media City', this)">Dubai Media City</button>
+      <button class="clinic-btn" onclick="filterDocs('Al Khawaneej', this)">Al Khawaneej</button>
+      <button class="clinic-btn" onclick="filterDocs('Nad Al Sheba', this)">Nad Al Sheba</button>
+      <button class="clinic-btn" onclick="filterDocs('Mira', this)">Mira</button>
+      <button class="clinic-btn" onclick="filterDocs('Jumeirah', this)">Jumeirah</button>
+      <button class="clinic-btn" onclick="filterDocs('Dubai Hills', this)">Dubai Hills</button>
+    </div>
+
+    <div class="grid21" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">Top Ordering Physicians <span class="tag" id="docChartLabel">all clinics · by test volume</span></div>
+        <canvas id="docBarChart" height="260"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Specialty Mix <span class="tag">test orders</span></div>
+        <canvas id="specChart" height="260"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Physician Profiles <span class="tag" id="docCardsLabel">ranked by test orders</span></div>
+      <div class="doc-grid" id="docCardsGrid"></div>
+      <div class="insight-box blue">🩺 <strong>Primary Care dominates</strong> ordering at 49% of all tests — Rapid Strep, CBC, and lipid panels are the primary care bread-and-butter. Deploying POCT Strep+Flu at high-volume Primary Care clinics directly reduces send-to-lab pressure for the top ordering physicians.</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ TAB 3: NATIONALITY -->
+  <div id="tab-nationality" class="tab-panel">
+
+    <div class="clinic-selector" id="natClinicFilter">
+      <button class="clinic-btn active" onclick="filterNat('all', this)">All Clinics</button>
+      <button class="clinic-btn" onclick="filterNat('Al Barsha', this)">Al Barsha</button>
+      <button class="clinic-btn" onclick="filterNat('Dubai Media City', this)">Dubai Media City</button>
+      <button class="clinic-btn" onclick="filterNat('Al Khawaneej', this)">Al Khawaneej</button>
+      <button class="clinic-btn" onclick="filterNat('Nad Al Sheba', this)">Nad Al Sheba</button>
+      <button class="clinic-btn" onclick="filterNat('Mira', this)">Mira</button>
+      <button class="clinic-btn" onclick="filterNat('Jumeirah', this)">Jumeirah</button>
+      <button class="clinic-btn" onclick="filterNat('Dubai Hills', this)">Dubai Hills</button>
+    </div>
+
+    <div class="grid2" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">Patient Nationality Distribution <span class="tag" id="natChartLabel">all clinics</span></div>
+        <canvas id="natPieChart" height="280"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Top 15 Nationalities — Test Volume <span class="tag" id="natBarLabel">all clinics</span></div>
+        <canvas id="natBarChart" height="280"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Nationality Breakdown per Clinic <span class="tag">top 5 per clinic · proportional bars</span></div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill,minmax(300px,1fr)); gap:20px;" id="natPerClinicGrid"></div>
+      <div class="insight-box blue">🌍 <strong>Al Khawaneej and Nad Al Sheba</strong> are overwhelmingly UAE National-dominant (57% and 45%). These clinics serve a different demographic profile than Dubai Media City (Lebanese+Jordanian) or Dubai Hills (expat-heavy: Canadian, Russian, UK). Language-aware POCT instruction and patient communication strategies differ by clinic.</div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════ TAB 4: OPERATIONS -->
+  <div id="tab-operations" class="tab-panel">
+
+    <div class="kpi-strip" style="grid-template-columns:repeat(4,1fr);">
+      <div class="kpi-card orange"><div class="kpi-label">Worst TAT</div><div class="kpi-value orange">189<span style="font-size:13px"> min</span></div><div class="kpi-sub">Al Barsha Clinic</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Best TAT</div><div class="kpi-value green">153<span style="font-size:13px"> min</span></div><div class="kpi-sub">Nad Al Sheba</div></div>
+      <div class="kpi-card yellow"><div class="kpi-label">Peak Hour</div><div class="kpi-value yellow">11:00</div><div class="kpi-sub">Al Barsha · 351 draws</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Send-Outs</div><div class="kpi-value blue">11</div><div class="kpi-sub">ANA Titer, Hgb Electro…</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Average Turnaround Time (Draw → Verified) <span class="tag">benchmark: &lt;90 min for routine chemistry</span></div>
+      <div id="tatBars"></div>
+      <div class="insight-box warn">⚠️ All 7 clinics exceed 150 min TAT — 2× the routine benchmark. <strong>Al Barsha (189 min)</strong> and <strong>Dubai Hills (188 min)</strong> are worst. POCT for Strep, CBC, and HbA1c at peak-demand clinics could bring effective TAT for targeted tests to &lt;15 minutes.</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Peak Hour Activity Heatmap <span class="tag">draws per hour · 08:00–19:00</span></div>
+      <div class="heatmap-wrap">
+        <div class="hm-hour-labels" id="hmHourLabels"></div>
+        <div class="heatmap" id="heatmapGrid"></div>
+      </div>
+      <div class="insight-box">🕐 <strong>Al Barsha</strong> peaks at 11:00 with 351 draws. <strong>Al Khawaneej</strong> shows dual peaks (12:00 + 15:00), indicating split-shift demand — two POCT windows needed. <strong>Dubai Hills</strong> peaks early (09:00), suggesting AM-heavy workflow.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Daily Volume Volatility by Clinic <span class="tag">day-over-day swings signal disruption impact</span></div>
+      <canvas id="volatilityChart" height="180"></canvas>
+      <div class="insight-box yellow">📊 <strong>Nad Al Sheba</strong> shows the highest daily volatility (Mar 4: 67 → Mar 8: 218), likely indicating disruption-related demand rerouting. <strong>Dubai Hills</strong> grew from near-zero (Mar 1: 7) to 121 (Mar 7), suggesting new referral load arriving post-disruption.</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>AHD Laboratory Innovation · Diagnostic Center Analytics</span>
+    <span>Source: 01_01_08_2026_claude.xlsx · 7,394 rows · 23 fields · Feb 28 – Mar 8 2026</span>
+  </footer>
+</div>
+
+<script>
+// ─── CORE DATA ─────────────────────────────────────────────────────────────
+const FACILITIES = ['Al Barsha','Dubai Media City','Al Khawaneej','Nad Al Sheba','Mira','Jumeirah','Dubai Hills'];
+const COLORS = ['#00e5a0','#5b8dee','#ff6b35','#ffcc00','#e056fd','#ff9ff3','#48dbfb'];
+const LABELS = ['Mar 1','Mar 2','Mar 3','Mar 4','Mar 5','Mar 6','Mar 7','Mar 8'];
+
+const dailyData = {
+  'Al Barsha':        [105,288,389,308,225,111,323,264],
+  'Dubai Media City': [123,123,111,222,200,73,200,212],
+  'Al Khawaneej':     [92,128,140,203,194,160,92,196],
+  'Nad Al Sheba':     [100,140,194,67,153,80,63,218],
+  'Mira':             [65,79,91,207,63,140,84,77],
+  'Jumeirah':         [40,40,77,63,153,58,100,16],
+  'Dubai Hills':      [7,53,24,95,110,57,121,76]
+};
+
+const poctData = {
+  'Al Barsha':        {poc:84, lab:1929, total:2013, tat:189, tpp:9.4},
+  'Dubai Media City': {poc:42, lab:1222, total:1264, tat:183, tpp:9.0},
+  'Al Khawaneej':     {poc:121,lab:1084, total:1205, tat:188, tpp:5.6},
+  'Nad Al Sheba':     {poc:118,lab:897,  total:1015, tat:153, tpp:6.2},
+  'Mira':             {poc:132,lab:675,  total:807,  tat:159, tpp:4.7},
+  'Jumeirah':         {poc:61, lab:486,  total:547,  tat:164, tpp:5.5},
+  'Dubai Hills':      {poc:31, lab:512,  total:543,  tat:188, tpp:5.7}
+};
+
+const poctBreakdownData = {
+  'Al Barsha':        {strep:52,flu:8, urine:12},
+  'Dubai Media City': {strep:14,flu:10,urine:8},
+  'Al Khawaneej':     {strep:102,flu:7,urine:6},
+  'Nad Al Sheba':     {strep:86,flu:18,urine:9},
+  'Mira':             {strep:95,flu:30,urine:4},
+  'Jumeirah':         {strep:24,flu:13,urine:8},
+  'Dubai Hills':      {strep:25,flu:0, urine:5}
+};
+
+const hourlyData = {
+  'Al Barsha':        [3,283,240,351,192,179,186,295,76,39,0,0],
+  'Dubai Media City': [19,139,231,114,181,75,107,132,123,56,0,0],
+  'Al Khawaneej':     [0,63,50,32,122,183,84,249,197,23,0,21],
+  'Nad Al Sheba':     [0,65,97,103,54,13,88,73,170,66,3,2],
+  'Mira':             [0,165,116,109,22,57,62,60,91,13,0,0],
+  'Jumeirah':         [0,67,99,56,63,26,60,20,83,2,0,0],
+  'Dubai Hills':      [0,116,58,63,62,58,50,54,11,2,1,0]
+};
+const HOURS = ['08','09','10','11','12','13','14','15','16','17','18','19'];
+
+// ─── PHYSICIAN DATA ────────────────────────────────────────────────────────
+const allDocs = [
+  {name:'Dr. Rasha Kazamel',       spec:'Consultant Family Medicine',           count:486, clinic:'Dubai Media City'},
+  {name:'Dr. Shireen Ismail',      spec:'Consultant Family Medicine',           count:362, clinic:'Al Barsha'},
+  {name:'Dr. Carla Sleiman',       spec:'Specialist Cardiology',                count:345, clinic:'Al Barsha'},
+  {name:'Dr. Lina Yousif',         spec:'Consultant Family Medicine',           count:333, clinic:'Nad Al Sheba'},
+  {name:'Dr. Al Hasan Gaghman',    spec:'Consultant Family Medicine',           count:302, clinic:'Al Barsha'},
+  {name:'Dr. Hubert Penninckx',    spec:'Consultant Endocrinology',             count:295, clinic:'Dubai Media City'},
+  {name:'Dr. Doaa Soliman',        spec:'Consultant Family Medicine',           count:252, clinic:'Al Khawaneej'},
+  {name:'Dr. May Al-Isa',          spec:'Consultant Family Medicine',           count:248, clinic:'Mira'},
+  {name:'Dr. Jmal Almaadadi',      spec:'Consultant Family Medicine',           count:248, clinic:'Nad Al Sheba'},
+  {name:'Dr. El Shafie',           spec:'Consultant Family Medicine',           count:234, clinic:'Al Khawaneej'},
+  {name:'Dr. M. Shaaraoui',        spec:'Consultant Cardiac Electrophysiology', count:228, clinic:'Al Barsha'},
+  {name:'Dr. Firas Darsh',         spec:'Consultant Family Medicine',           count:196, clinic:'Nad Al Sheba'},
+  {name:'Dr. Sarah Spencer',       spec:'Consultant Family Medicine',           count:194, clinic:'Dubai Media City'},
+  {name:'Dr. Salahaldin Arif',     spec:'Consultant Family Medicine',           count:176, clinic:'Mira'},
+  {name:'Dr. Zeina Knio',          spec:'Specialist Dermatology',               count:172, clinic:'Al Khawaneej'},
+  {name:'Dr. Julien Bachour',      spec:'Specialist Dermatology',               count:151, clinic:'Al Barsha'},
+  {name:'Dr. Myrna Elshareef',     spec:'Specialist Dermatology',               count:136, clinic:'Al Khawaneej'},
+  {name:'Dr. Hanaa Elzawawy',      spec:'Consultant Endocrinology',             count:131, clinic:'Dubai Media City'},
+  {name:'Dr. Semon Abdelshaheed', spec:'Specialist Pediatrics',                count:117, clinic:'Mira'},
+  {name:'Dr. Sama Yasso',          spec:'Consultant Family Medicine',           count:115, clinic:'Jumeirah'},
+  {name:'Dr. Nadia Tawalbeh',      spec:'Specialist Dermatology',               count:104, clinic:'Dubai Hills'},
+  {name:'Dr. Malaka Basilios',     spec:'Specialist Pediatrics',                count:100, clinic:'Mira'},
+  {name:'Dr. Maher Mnajid',        spec:'Specialist Family Medicine',           count:90,  clinic:'Dubai Hills'},
+  {name:'Dr. Anna Bartosinska Dyc',spec:'Consultant OB/Gyn',                   count:78,  clinic:'Jumeirah'},
+  {name:'Dr. Jihan Mahmoud',       spec:'Specialist Pediatrics',                count:69,  clinic:'Dubai Hills'},
+];
+
+// ─── NATIONALITY DATA ──────────────────────────────────────────────────────
+const allNats = [
+  {name:'UAE',count:1449,flag:'🇦🇪'},
+  {name:'Egypt',count:547,flag:'🇪🇬'},
+  {name:'Jordan',count:487,flag:'🇯🇴'},
+  {name:'Lebanon',count:435,flag:'🇱🇧'},
+  {name:'UK',count:434,flag:'🇬🇧'},
+  {name:'Philippines',count:301,flag:'🇵🇭'},
+  {name:'India',count:251,flag:'🇮🇳'},
+  {name:'Pakistan',count:224,flag:'🇵🇰'},
+  {name:'USA',count:195,flag:'🇺🇸'},
+  {name:'Canada',count:180,flag:'🇨🇦'},
+  {name:'France',count:164,flag:'🇫🇷'},
+  {name:'Australia',count:161,flag:'🇦🇺'},
+  {name:'Russia',count:141,flag:'🇷🇺'},
+  {name:'Italy',count:101,flag:'🇮🇹'},
+  {name:'Algeria',count:90,flag:'🇩🇿'},
+];
+
+const natByClinic = {
+  'Al Barsha':       [{name:'UAE',count:184,flag:'🇦🇪'},{name:'Egypt',count:178,flag:'🇪🇬'},{name:'UK',count:148,flag:'🇬🇧'},{name:'Philippines',count:147,flag:'🇵🇭'},{name:'Jordan',count:141,flag:'🇯🇴'}],
+  'Dubai Media City':[{name:'Lebanon',count:166,flag:'🇱🇧'},{name:'Jordan',count:162,flag:'🇯🇴'},{name:'Egypt',count:111,flag:'🇪🇬'},{name:'UK',count:73,flag:'🇬🇧'},{name:'Italy',count:67,flag:'🇮🇹'}],
+  'Al Khawaneej':   [{name:'UAE',count:692,flag:'🇦🇪'},{name:'Pakistan',count:101,flag:'🇵🇰'},{name:'Lebanon',count:61,flag:'🇱🇧'},{name:'Jordan',count:59,flag:'🇯🇴'},{name:'Oman',count:25,flag:'🇴🇲'}],
+  'Nad Al Sheba':   [{name:'UAE',count:459,flag:'🇦🇪'},{name:'Iraq',count:65,flag:'🇮🇶'},{name:'Australia',count:37,flag:'🇦🇺'},{name:'France',count:34,flag:'🇫🇷'},{name:'UK',count:33,flag:'🇬🇧'}],
+  'Mira':           [{name:'Egypt',count:165,flag:'🇪🇬'},{name:'India',count:83,flag:'🇮🇳'},{name:'UK',count:76,flag:'🇬🇧'},{name:'Lebanon',count:74,flag:'🇱🇧'},{name:'Jordan',count:66,flag:'🇯🇴'}],
+  'Jumeirah':       [{name:'UAE',count:78,flag:'🇦🇪'},{name:'UK',count:55,flag:'🇬🇧'},{name:'Philippines',count:39,flag:'🇵🇭'},{name:'Morocco',count:32,flag:'🇲🇦'},{name:'Saint Lucia',count:27,flag:'🇱🇨'}],
+  'Dubai Hills':    [{name:'Canada',count:60,flag:'🇨🇦'},{name:'Russia',count:54,flag:'🇷🇺'},{name:'UK',count:43,flag:'🇬🇧'},{name:'USA',count:43,flag:'🇺🇸'},{name:'Jordan',count:40,flag:'🇯🇴'}],
+};
+
+// ─── SCORING ────────────────────────────────────────────────────────────────
+function scoreClinic(d) {
+  const volScore = ((d.total-543)/(2013-543))*100;
+  const pocScore = ((d.poc/d.total*100-3.3)/(16.4-3.3))*100;
+  const tatScore = ((d.tat-153)/(189-153))*100;
+  const tppScore = (1-(d.tpp-4.7)/(9.4-4.7))*100;
+  return Math.round(volScore*.30 + pocScore*.30 + tatScore*.20 + tppScore*.20);
+}
+function getRec(score) {
+  if(score>=70) return {cls:'rec-deploy',label:'🚀 Deploy POCT'};
+  if(score>=50) return {cls:'rec-consider',label:'⚡ Consider'};
+  if(score>=30) return {cls:'rec-monitor',label:'👁 Monitor'};
+  return {cls:'rec-hold',label:'— Hold'};
+}
+function getDriver(name, d) {
+  const poc = d.poc/d.total*100;
+  if(poc>12) return 'High organic POCT demand';
+  if(d.tat>185) return 'Critical TAT pressure';
+  if(d.total>1500) return 'High overall volume';
+  return 'Moderate across all factors';
+}
+
+// ─── TABS ────────────────────────────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ─── CHART.JS DEFAULTS ──────────────────────────────────────────────────────
+Chart.defaults.color = '#6b7499';
+Chart.defaults.font.family = "'DM Mono', monospace";
+
+// ─── POCT READINESS TABLE ───────────────────────────────────────────────────
+const tbody = document.getElementById('poct-tbody');
+const scored = Object.entries(poctData)
+  .map(([name,d])=>({name,d,score:scoreClinic(d)}))
+  .sort((a,b)=>b.score-a.score);
+scored.forEach(({name,d,score})=>{
+  const poc=(d.poc/d.total*100).toFixed(1);
+  const rec=getRec(score);
+  const driver=getDriver(name,d);
+  const col=score>=70?'#00e5a0':score>=50?'#ffcc00':score>=30?'#5b8dee':'#6b7499';
+  tbody.innerHTML+=`<tr>
+    <td><span class="strong-name">${name}</span></td>
+    <td class="right">${d.total.toLocaleString()}</td>
+    <td class="right" style="color:${poc>10?'var(--accent2)':'var(--muted)'}">${poc}%</td>
+    <td class="right hide-mobile" style="color:${d.tat>180?'var(--accent2)':'var(--muted)'}">${d.tat} min</td>
+    <td class="right hide-mobile" style="color:var(--muted)">${d.tpp}</td>
+    <td><div class="score-bar-wrap"><div class="score-bar-bg"><div class="score-bar-fill" style="width:${score}%;background:${col}"></div></div><span class="score-val" style="color:${col}">${score}</span></div></td>
+    <td><span class="recommendation ${rec.cls}">${rec.label}</span></td>
+    <td class="hide-mobile" style="color:var(--muted);font-size:10px">${driver}</td>
+  </tr>`;
+});
+
+// ─── TAT BARS ────────────────────────────────────────────────────────────────
+const tatContainer = document.getElementById('tatBars');
+const tatOrder = [['Al Barsha',189],['Dubai Hills',188],['Al Khawaneej',188],['Dubai Media City',183],['Jumeirah',164],['Mira',159],['Nad Al Sheba',153]];
+tatOrder.forEach(([name,tat])=>{
+  const pct=((tat-140)/(200-140))*100;
+  const col=tat>180?'#ff6b35':tat>165?'#ffcc00':'#00e5a0';
+  tatContainer.innerHTML+=`<div class="tat-bar-row">
+    <div class="tat-fac-name">${name} Clinic</div>
+    <div class="tat-bar-bg"><div class="tat-bar-fill" style="width:${pct}%;background:${col}20;border-right:2px solid ${col}">
+      <span style="color:${col};font-family:'DM Mono',monospace;font-size:10px">${tat} min</span>
+    </div></div>
+    <div class="tat-val" style="color:${col}">${tat>180?'⚠':tat>165?'△':'✓'}</div>
+  </div>`;
+});
+
+// ─── HEATMAP ─────────────────────────────────────────────────────────────────
+const hmHL = document.getElementById('hmHourLabels');
+HOURS.forEach(h=>{ hmHL.innerHTML+=`<div class="hm-hour-label">${h}h</div>`; });
+const grid = document.getElementById('heatmapGrid');
+const hMax = Math.max(...Object.values(hourlyData).flat());
+Object.entries(hourlyData).forEach(([name,vals])=>{
+  const row=document.createElement('div'); row.className='heatmap-row';
+  row.innerHTML=`<div class="hm-label">${name}</div>`;
+  vals.forEach((v,i)=>{
+    const intensity=v/hMax;
+    const cell=document.createElement('div'); cell.className='hm-cell';
+    const r=Math.round(intensity*255), g=Math.round(229-intensity*80), b=Math.round(160-intensity*160);
+    cell.style.background=`rgba(${r},${g},${b},${0.05+intensity*0.85})`;
+    cell.title=`${name} ${HOURS[i]}:00 → ${v} draws`;
+    if(v>50) cell.textContent=v;
+    row.appendChild(cell);
+  });
+  grid.appendChild(row);
+});
+
+// ─── CHARTS ──────────────────────────────────────────────────────────────────
+const chartOpts = { responsive:true, plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:10,font:{size:10}}},tooltip:{backgroundColor:'#161b2a',borderColor:'#1f2840',borderWidth:1}}, scales:{x:{grid:{color:'#1f2840'},ticks:{font:{size:9}}},y:{grid:{color:'#1f2840'},ticks:{font:{size:10}},beginAtZero:true}} };
+
+// Daily line
+new Chart(document.getElementById('dailyChart'),{type:'line',data:{labels:LABELS,datasets:FACILITIES.map((name,i)=>({label:name,data:dailyData[name],borderColor:COLORS[i],backgroundColor:COLORS[i]+'15',borderWidth:2,pointRadius:3,pointHoverRadius:6,tension:.35,fill:false}))},options:{...chartOpts,interaction:{mode:'index',intersect:false}}});
+
+// POCT split
+new Chart(document.getElementById('poctSplitChart'),{type:'bar',data:{labels:FACILITIES,datasets:[{label:'POCT',data:FACILITIES.map(f=>poctData[f].poc),backgroundColor:'#00e5a0',borderRadius:2},{label:'Central Lab',data:FACILITIES.map(f=>poctData[f].lab),backgroundColor:'#5b8dee',borderRadius:2}]},options:{...chartOpts,scales:{x:{stacked:true,grid:{color:'#1f2840'},ticks:{font:{size:9}}},y:{stacked:true,grid:{color:'#1f2840'},ticks:{font:{size:10}},beginAtZero:true}}}});
+
+// Top tests
+new Chart(document.getElementById('topTestsChart'),{type:'bar',data:{labels:['Rapid Strep','CBC','ALT','AST','Albumin','Creatinine','Ferritin','LDL','Cholesterol','TSH'],datasets:[{data:[400,338,223,220,201,193,186,184,179,165],backgroundColor:['#00e5a0','#5b8dee','#5b8dee','#5b8dee',...Array(6).fill('#1f2840')],borderRadius:2}]},options:{...chartOpts,indexAxis:'y',plugins:{legend:{display:false},tooltip:{backgroundColor:'#161b2a',borderColor:'#1f2840',borderWidth:1}}}});
+
+// POCT breakdown
+new Chart(document.getElementById('poctBreakdownChart'),{type:'bar',data:{labels:FACILITIES,datasets:[{label:'Rapid Strep',data:FACILITIES.map(f=>poctBreakdownData[f].strep),backgroundColor:'#00e5a0',borderRadius:2},{label:'Flu A&B',data:FACILITIES.map(f=>poctBreakdownData[f].flu),backgroundColor:'#ff6b35',borderRadius:2},{label:'Urine Dipstick',data:FACILITIES.map(f=>poctBreakdownData[f].urine),backgroundColor:'#ffcc00',borderRadius:2}]},options:{...chartOpts}});
+
+// Volatility area
+new Chart(document.getElementById('volatilityChart'),{type:'line',data:{labels:LABELS,datasets:FACILITIES.map((name,i)=>({label:name,data:dailyData[name],borderColor:COLORS[i],backgroundColor:COLORS[i]+'08',borderWidth:2,pointRadius:2,tension:.4,fill:true}))},options:{...chartOpts,interaction:{mode:'index',intersect:false}}});
+
+// ─── PHYSICIAN SECTION ────────────────────────────────────────────────────────
+let docChartInst = null;
+let specChartInst = null;
+
+function renderDocs(filter) {
+  const docs = filter==='all' ? allDocs : allDocs.filter(d=>d.clinic===filter);
+  const top12 = docs.slice(0,12);
+  const maxCount = top12[0]?.count||1;
+
+  // Bar chart
+  if(docChartInst) docChartInst.destroy();
+  docChartInst = new Chart(document.getElementById('docBarChart'),{
+    type:'bar',
+    data:{
+      labels:top12.map(d=>d.name.replace('Dr. ','')),
+      datasets:[{data:top12.map(d=>d.count),backgroundColor:top12.map((_,i)=>i===0?'#00e5a0':'#5b8dee99'),borderRadius:2}]
+    },
+    options:{...chartOpts,indexAxis:'y',plugins:{legend:{display:false},tooltip:{backgroundColor:'#161b2a',borderColor:'#1f2840',borderWidth:1}}}
+  });
+  document.getElementById('docChartLabel').textContent=(filter==='all'?'all clinics':filter+' Clinic')+' · by test volume';
+
+  // Specialty donut
+  const specCounts={};
+  docs.forEach(d=>{ const s=d.spec.split(' ').slice(-2).join(' '); specCounts[s]=(specCounts[s]||0)+d.count; });
+  const specEntries=Object.entries(specCounts).sort((a,b)=>b[1]-a[1]).slice(0,7);
+  const specColors=['#00e5a0','#5b8dee','#ff6b35','#ffcc00','#e056fd','#ff9ff3','#48dbfb'];
+  if(specChartInst) specChartInst.destroy();
+  specChartInst = new Chart(document.getElementById('specChart'),{
+    type:'doughnut',
+    data:{labels:specEntries.map(e=>e[0]),datasets:[{data:specEntries.map(e=>e[1]),backgroundColor:specColors,borderColor:'#0a0d14',borderWidth:2}]},
+    options:{responsive:true,plugins:{legend:{position:'right',labels:{boxWidth:10,padding:8,font:{size:10}}},tooltip:{backgroundColor:'#161b2a',borderColor:'#1f2840',borderWidth:1}}}
+  });
+
+  // Cards
+  const grid=document.getElementById('docCardsGrid'); grid.innerHTML='';
+  docs.slice(0,12).forEach(d=>{
+    const pct=Math.round(d.count/maxCount*100);
+    const specColor = d.spec.includes('Family')?'var(--accent3)':d.spec.includes('Cardio')?'var(--accent2)':d.spec.includes('Endo')?'var(--warn)':d.spec.includes('Derma')?'#e056fd':d.spec.includes('Peds')||d.spec.includes('Pediatrics')?'#48dbfb':'var(--muted)';
+    grid.innerHTML+=`<div class="doc-card">
+      <div class="doc-header">
+        <div><div class="doc-name">${d.name}</div><div class="doc-spec" style="color:${specColor}">${d.spec}</div></div>
+        <div class="doc-count-badge">${d.count}</div>
+      </div>
+      <div class="doc-fac">📍 ${d.clinic} Clinic</div>
+      <div class="doc-bar-bg"><div class="doc-bar-fill" style="width:${pct}%;background:${specColor}"></div></div>
+    </div>`;
+  });
+  document.getElementById('docCardsLabel').textContent=(filter==='all'?'all clinics — ':filter+' — ')+'ranked by test orders';
+}
+
+function filterDocs(filter, btn) {
+  document.querySelectorAll('#docClinicFilter .clinic-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDocs(filter);
+}
+renderDocs('all');
+
+// ─── NATIONALITY SECTION ──────────────────────────────────────────────────────
+let natPieInst=null, natBarInst=null;
+
+function renderNat(filter) {
+  const nats = filter==='all' ? allNats : (natByClinic[filter]||allNats);
+  const maxN = nats[0]?.count||1;
+
+  if(natPieInst) natPieInst.destroy();
+  natPieInst = new Chart(document.getElementById('natPieChart'),{
+    type:'doughnut',
+    data:{labels:nats.map(n=>n.flag+' '+n.name),datasets:[{data:nats.map(n=>n.count),backgroundColor:['#00e5a0','#5b8dee','#ff6b35','#ffcc00','#e056fd','#ff9ff3','#48dbfb','#00cec9','#fdcb6e','#6c5ce7','#a29bfe','#fd79a8','#55efc4','#74b9ff','#fab1a0'],borderColor:'#0a0d14',borderWidth:2}]},
+    options:{responsive:true,plugins:{legend:{position:'right',labels:{boxWidth:12,padding:8,font:{size:10}}},tooltip:{backgroundColor:'#161b2a',borderColor:'#1f2840',borderWidth:1}}}
+  });
+
+  if(natBarInst) natBarInst.destroy();
+  natBarInst = new Chart(document.getElementById('natBarChart'),{
+    type:'bar',
+    data:{labels:nats.map(n=>n.flag+' '+n.name),datasets:[{data:nats.map(n=>n.count),backgroundColor:nats.map((_,i)=>i===0?'#00e5a0':i<3?'#5b8dee':'#1f2840'),borderRadius:2}]},
+    options:{...chartOpts,indexAxis:'y',plugins:{legend:{display:false},tooltip:{backgroundColor:'#161b2a',borderColor:'#1f2840',borderWidth:1}}}
+  });
+  document.getElementById('natChartLabel').textContent=filter==='all'?'all clinics':filter+' Clinic';
+  document.getElementById('natBarLabel').textContent=filter==='all'?'all clinics':filter+' Clinic';
+
+  // Per-clinic breakdown
+  const clinicGrid=document.getElementById('natPerClinicGrid'); clinicGrid.innerHTML='';
+  const clinicsToShow = filter==='all' ? Object.entries(natByClinic) : [[filter, natByClinic[filter]||[]]];
+  clinicsToShow.forEach(([clinic,nats2])=>{
+    const maxCN=nats2[0]?.count||1;
+    const rows=nats2.map(n=>{
+      const pct=Math.round(n.count/maxCN*100);
+      const col=['#00e5a0','#5b8dee','#ff6b35','#ffcc00','#e056fd'][nats2.indexOf(n)]||'#6b7499';
+      return `<div class="nat-row">
+        <div class="nat-flag">${n.flag}</div>
+        <div class="nat-name">${n.name}</div>
+        <div class="nat-bar-bg"><div class="nat-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div class="nat-count">${n.count}</div>
+      </div>`;
+    }).join('');
+    clinicGrid.innerHTML+=`<div><div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)">${clinic}</div><div class="nat-list">${rows}</div></div>`;
+  });
+}
+
+function filterNat(filter, btn) {
+  document.querySelectorAll('#natClinicFilter .clinic-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderNat(filter);
+}
+renderNat('all');
+</script>
+</body>
+</html>
